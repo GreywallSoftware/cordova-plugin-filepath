@@ -14,6 +14,8 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 
+import androidx.core.content.ContextCompat;
+
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
@@ -41,16 +43,22 @@ public class FilePath extends CordovaPlugin {
     private static final String GET_CLOUD_PATH_ERROR_ID = "cloud";
 
     private static final int RC_READ_EXTERNAL_STORAGE = 5;
+    private static final int PERMISSION_REQUEST_CODE = 100;
 
     private static CallbackContext callback;
     private static String uriStr;
 
     public static final int READ_REQ_CODE = 0;
 
+
     public static final String READ = Manifest.permission.READ_EXTERNAL_STORAGE;
 
     protected void getReadPermission(int requestCode) {
+      if (Build.VERSION.SDK_INT < 33) {
         PermissionHelper.requestPermission(this, requestCode, READ);
+      } else {
+        cordova.requestPermissions(this, PERMISSION_REQUEST_CODE, new String[]{Manifest.permission.READ_MEDIA_IMAGES});
+      }
     }
 
     public void initialize(CordovaInterface cordova, final CordovaWebView webView) {
@@ -71,7 +79,7 @@ public class FilePath extends CordovaPlugin {
         this.uriStr = args.getString(0);
 
         if (action.equals("resolveNativePath")) {
-            if (PermissionHelper.hasPermission(this, READ)) {
+            if (PermissionHelper.hasPermission(this, READ) || PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(this.cordova.getActivity(), Manifest.permission.READ_MEDIA_IMAGES)) {
                 resolveNativePath();
             }
             else {
@@ -302,20 +310,6 @@ public class FilePath extends CordovaPlugin {
     }
 
     /**
-     * sometimes in raw type, the second part is a valid filepath
-     *
-     * @param rawPath The raw path
-     */
-    private static String getRawFilepath(String rawPath) {
-        final String[] split = rawPath.split(":");
-        if (fileExists(split[1])) {
-            return split[1];
-        }
-
-        return "";
-    }
-
-    /**
      * Get a file path from a Uri. This will get the the path for Storage Access
      * Framework Documents, as well as the _data field for the MediaStore and
      * other file-based ContentProviders.<br>
@@ -375,13 +369,6 @@ public class FilePath extends CordovaPlugin {
                 }
                 //
                 final String id = DocumentsContract.getDocumentId(uri);
-
-                // sometimes in raw type, the second part is a valid filepath
-                final String rawFilepath = getRawFilepath(id);
-                if (rawFilepath != "") {
-                    return rawFilepath;
-                }
-
                 String[] contentUriPrefixesToTry = new String[]{
                         "content://downloads/public_downloads",
                         "content://downloads/my_downloads"
